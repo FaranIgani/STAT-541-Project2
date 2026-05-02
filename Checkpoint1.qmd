@@ -419,7 +419,7 @@ joined_all %>%
 ```
 :::
 
-### Visuals {height="40%"}
+### Visuals {height="36%"}
 
 ```{r}
 #| label: Top companies by region
@@ -464,13 +464,13 @@ ggplot(top_companies_region,
   scale_fill_brewer(palette = "Dark2") +
   theme_light() +
   theme(
-    plot.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", size= 15),
     plot.subtitle = element_text(size = 11),
     panel.grid.minor = element_blank()
   )
 ```
 
-### visuals {height="40%"}
+### visuals {height="36%"}
 
 ```{r}
 table3_long <- table3_year %>%
@@ -497,7 +497,7 @@ ggplot(table3_long, aes(x = prop, y = plastic_type, color = factor(Year))) +
   ) +
   theme_light(base_size = 14) +
   theme(
-    plot.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", size= 15),
     axis.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
   )
@@ -505,7 +505,7 @@ ggplot(table3_long, aes(x = prop, y = plastic_type, color = factor(Year))) +
 
 ## RQ2 visuals
 
-### visuals {height="30%"}
+### visual {height="30%"}
 
 ```{r}
 #| fig-alt: "A ridgeline density plot showing the distribution of total plastic waste per country, separated by continent. Americas has the highest peak near zero with a moderate right tail. Asia has a flatter distribution with several secondary peaks at high waste values representing individual countries producing high waste. Africa is multimodal. Europe is concentrated near zero with one outlier peak. All distributions are right-skewed."
@@ -533,12 +533,12 @@ vis_1 <- joined_all %>%
   guides(fill = guide_legend(reverse = TRUE)) +
   theme_minimal() +
   theme(legend.position = "none",
-        plot.title = element_text(face = "bold", size = 14))
+        plot.title = element_text(face = "bold", size = 15))
 
 vis_1
 ```
 
-### Tables {height="50%"}
+### Tables 
 
 ::: panel-tabset
 ## Plastic Per Capita
@@ -631,7 +631,7 @@ gdp_combo %>%
 
 ## Visual and model 
 
-### visuals gdp {height="40%"}
+### visual gdp {height="40%"}
 
 ```{r}
 #| fig-alt: "A scatterplot comparing recorded plastic waste on the y-axis against GDP per capita on the x-axis, with points colored by continent. The majority of points are clustered near zero on both axes. One African country is a strong outlier with approximately 165,000 units of plastic waste recorded despite a very low GDP per capita below 5,000. Several Asian and Americas countries also show elevated waste counts at low GDP levels. European countries are spread across the full GDP per capita range but generally show low waste counts. No clear positive or negative relationship between GDP per capita and plastic waste is visible across the full dataset."
@@ -660,7 +660,7 @@ vis_2 <- joined_all %>%
   ) +
   theme_light(base_size = 15) +
   theme(
-    plot.title = element_text(face = "bold"),
+    plot.title = element_text(face = "bold", size= 15),
     plot.subtitle = element_text(size = 11),
     axis.title = element_text(face = "bold"),
     panel.grid.minor = element_blank()
@@ -736,7 +736,7 @@ model_gt <- model_table %>%
     title = md("**Regression Model for Log Total Plastic Collected**")
   ) %>%
   tab_source_note(
-    source_note = "Linear regression model predicting log total plastic collected from GDP, population density, and region."
+    source_note = "Linear regression model predicting log total plastic collected from GDP, and region."
   )
 
 model_gt

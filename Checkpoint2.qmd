@@ -53,8 +53,6 @@ base_url <- "https://restcountries.com/v4/"
 
 restcountries <- GET(glue("{base_url}all?fields=name,continents,region,subregion,unMember,gini,density,geolocation"))
 
-restcountries
-
 restcountries_tidy <- restcountries %>% 
   content(as = "text") %>% 
   fromJSON(flatten = TRUE) %>%
@@ -387,7 +385,6 @@ income_summary %>%
     source_note = "Countries grouped by GDP per capita using World Bank income thresholds. Recorded plastic per person calculated as total recorded items divided by population."
   )
 ```
-
 :::
 
 

@@ -332,45 +332,62 @@ joined_all %>%
 
 </br>
 
-GDP of Countries and GDP per capita
+Capita Recorded Plastic Wast
 
 ```{r}
-#| label: bottom-30
-gdp_combo <- joined_all %>%
-  filter(!is.na(gdp), !is.na(gdppercapita), !is.na(country)) %>%
-  group_by(country, year) %>%
-  summarise(
-    gdp = mean(gdp, na.rm = TRUE),
-    gdp_per_capita = mean(gdppercapita, na.rm = TRUE),
-    .groups = "drop"
-  ) %>%
-  arrange(desc(gdp))
+# GDP per capita income brackets
+income_breaks <- c(0, 10000, 20000, 40000, Inf)
+income_labels <- c("Low (<$10K)", "Lower-Middle ($10K-$20K)", 
+                   "Upper-Middle ($20K-$40K)", "High (>$40K)")
 
-gdp_combo %>%
+country_level <- joined_all %>%
+  filter(!(parent_company %in% c("Grand Total", "null", "Unbranded", "Assorted", "NULL"))) %>%
+  group_by(country, region, gdppercapita, population) %>%
+  summarise(total_plastic = sum(grand_total, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    plastic_per_capita = total_plastic / population,
+    income_group = cut(gdppercapita, breaks = income_breaks, labels = income_labels)
+  )
+
+# Custom function: summary stats for one income group
+summarise_income_group <- function(group_name) {
+  country_level %>%
+    filter(income_group == group_name) %>%
+    summarise(
+      income_group        = group_name,
+      n_countries         = n(),
+      avg_gdp_per_capita  = mean(gdppercapita, na.rm = TRUE),
+      avg_plastic_per_capita = mean(plastic_per_capita, na.rm = TRUE),
+      median_plastic_per_capita = median(plastic_per_capita, na.rm = TRUE),
+      total_plastic       = sum(total_plastic, na.rm = TRUE)
+    )
+}
+
+income_summary <- income_labels %>%
+  purrr::map(summarise_income_group) %>%
+  list_rbind()
+
+income_summary %>%
   gt() %>%
   cols_label(
-    country = md("**Country**"),
-    year = md("**Year**"),
-    gdp = md("**GDP (USD)**"),
-    gdp_per_capita = md("**GDP per Capita (USD)**")
+    income_group = md("**Income Group**"),
+    n_countries = md("**Countries**"),
+    avg_gdp_per_capita = md("**Avg GDP per Capita (USD)**"),
+    avg_plastic_per_capita = md("**Avg Plastic per Person**"),
+    median_plastic_per_capita = md("**Median Plastic per Person**"),
+    total_plastic = md("**Total Plastic**")
   ) %>%
-  fmt_currency(
-    columns = gdp,
-    currency = "USD",
-    decimals = 0
-  ) %>%
-  fmt_currency(
-    columns = gdp_per_capita,
-    currency = "USD",
-    decimals = 0
-  ) %>%
+  fmt_currency(columns = avg_gdp_per_capita, currency = "USD", decimals = 0) %>%
+  fmt_number(columns = c(avg_plastic_per_capita, median_plastic_per_capita), decimals = 5) %>%
+  fmt_number(columns = total_plastic, decimals = 0) %>%
   tab_header(
-    title = md("**GDP and GDP per Capita by Country and Year**")
+    title = md("**Per Capita Recorded Plastic Waste by Economic Group**")
   ) %>%
   tab_source_note(
-    source_note = "GDP and GDP per capita values are reported in current U.S. dollars from the World Bank."
+    source_note = "Countries grouped by GDP per capita using World Bank income thresholds. Recorded plastic per person calculated as total recorded items divided by population."
   )
 ```
+
 :::
 
 
@@ -460,7 +477,6 @@ leaflet(plastics_country |> filter(!is.na(lat), !is.na(lng))) |>
     stroke = FALSE
   )
 ```
-
 
 # Country Deep Dive
 

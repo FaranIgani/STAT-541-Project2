@@ -46,11 +46,14 @@ plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/t
 
 ```{r}
 #| label: data-from-api
-#
+#| message: FALSE
+#| warning: FALSE
 
 base_url <- "https://restcountries.com/v4/"
 
 restcountries <- GET(glue("{base_url}all?fields=name,continents,region,subregion,unMember,gini,density,geolocation"))
+
+restcountries
 
 restcountries_tidy <- restcountries %>% 
   content(as = "text") %>% 
@@ -87,7 +90,7 @@ plastics_clean <- plastics %>%
   mutate(country_key = normalize_name(country))
 
 restcountries_clean <- restcountries_tidy %>% 
-  select(name.common, name.official, region, subregion,
+  dplyr::select(name.common, name.official, region, subregion,
          density, unMember, geolocation.latitude, 
          geolocation.longitude) %>% 
   mutate(common_key = recode(
@@ -101,17 +104,17 @@ restcountries_clean <- restcountries_tidy %>%
 
 joined <- plastics_clean %>%
   left_join(
-    restcountries_clean %>% select(-official_key),
+    restcountries_clean %>% dplyr::select(-official_key),
     by = c("country_key" = "common_key")
   )
 
 matched <- joined %>% filter(!is.na(region))
 unmatched <- joined %>% filter(is.na(region)) %>%
-  select(names(plastics_clean))
+  dplyr::select(names(plastics_clean))
 
 refilled <- unmatched %>%
   left_join(
-    restcountries_clean %>% select(-common_key),
+    restcountries_clean %>% dplyr::select(-common_key),
     by = c("country_key" = "official_key")
   )
 
@@ -164,7 +167,7 @@ resolve_typos <- function(names, threshold = 0.1) {
   tibble(normalized = names, canonical = str_to_title(canonical))
 }
 
-companies_raw <- unique(joined1$parent_company)
+companies_raw <- unique(joined$parent_company)
 
 name_map <- tibble(original = companies_raw) %>%
   mutate(normalized = normalize_company(original)) %>%
@@ -176,14 +179,15 @@ name_map <- tibble(original = companies_raw) %>%
 canonical_labels <- name_map %>%
   count(canonical, original) %>%          # count how often each original appears
   slice_max(n, by = canonical, n = 1, with_ties = FALSE) %>% # pick the most frequent per canonical
-  select(canonical, display_name = original)
+  dplyr::select(canonical, display_name = original)
 
 joined <- joined1 %>%
-  left_join(name_map %>% select(original, canonical),
+  left_join(name_map %>% dplyr::select(original, canonical),
             by = c("parent_company" = "original")) %>%
   left_join(canonical_labels, by = "canonical") %>% 
   mutate(parent_company = display_name) %>% 
-  select(-display_name, -canonical)
+  dplyr::select(-display_name, -canonical) %>% 
+  mutate(country = str_to_title(country_key))
 ```
 
 ```{r}
@@ -245,7 +249,7 @@ joined_all <- joined %>%
 # Main Dashboard
 
 
-## RQ2 visuals
+## RQ2  How does country geography and economic status effect their amount of recorded plastic waste? Do more developed countries in terms of GDP and population tend to have more or less recorded waste?
 
 ### visual 
 
@@ -369,7 +373,8 @@ gdp_combo %>%
 ```
 :::
 
-## Visual and model
+
+## Visuals
 
 ### visual gdp {height="45%"}
 
@@ -408,7 +413,6 @@ vis_2 <- joined_all %>%
 
 vis_2
 ```
-
 
 
 ### leaflet
@@ -463,7 +467,7 @@ leaflet(plastics_country |> filter(!is.na(lat), !is.na(lng))) |>
 ## New country
 
 ### Why this country?
-We selected Nigeria because its plastic per capria waste was a very big outlier, making it useful for understanding general patterns in the dataset. How it differs from a typical country.
+We selected Montenegro because its plastic per capita waste was a very big outlier, making it useful for understanding general patterns in the dataset; how it differs from a typical country.
 
 
 ```{r}
@@ -557,7 +561,7 @@ p <- ggplot(renewable_raw, aes(
   geom_line(color = "steelblue", linewidth = 1) +
   geom_point(color = "steelblue", size = 2) +
   labs(
-    title = "Renewable Energy Consumption in the Netherlands (2010-2020)",
+    title = "Renewable Energy Consumption in the Montenegro (2010-2020)",
     x = "Year",
     y = "Renewable Energy Consumption (%)"
   ) +
@@ -582,7 +586,7 @@ p_gdp <- ggplot(gdp_pc_raw, aes(
   geom_line(color = "steelblue", linewidth = 1) +
   geom_point(color = "steelblue", size = 2) +
   labs(
-    title = "GDP per Capita in the Netherlands (2010-2020)",
+    title = "GDP per Capita in the Montenegro (2010-2020)",
     x = "Year",
     y = "GDP per Capita"
   ) +
@@ -606,7 +610,7 @@ p_pop <- ggplot(pop_growth_raw, aes(
   geom_line(color = "steelblue", linewidth = 1) +
   geom_point(color = "steelblue", size = 2) +
   labs(
-    title = "Population Growth in the Netherlands (2010-2020)",
+    title = "Population Growth in the Montenegro (2010-2020)",
     x = "Year",
     y = "Population Growth (%)"
   ) +

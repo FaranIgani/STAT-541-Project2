@@ -1,0 +1,781 @@
+---
+title: "Plastic Waste Dashboard"
+format: 
+  dashboard:
+    orientation: columns
+    theme: flatly
+server: shiny
+embed-resources: true
+logo: plastic-logo.svg
+logo-alt: "Recycling Logo with caption"
+nav-buttons:
+      - icon: github
+        href: https://github.com/FaranIgani
+        aria-label: GitHub
+      - icon: linkedin
+        href: https://linkedin.com/in/faran-igani
+        aria-label: LinkedIn
+---
+
+```{r}
+#| label: load-packages
+library(tidyverse)
+library(gt)
+library(rvest)
+library(ggplot2)
+library(dplyr)
+library(httr2)
+library(jsonlite)
+library(httr)
+library(glue)
+library(tidyjson)
+library(ggridges)
+library(scales)
+library(stringdist)
+library(tidytext)
+library(leaflet)
+library(maps)
+library(plotly)
+library(gganimate)
+library(gifski)
+library(shiny)
+library(broom)
+```
+
+```{r}
+#| label: Load the Data
+plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
+```
+
+```{r}
+#| label: data-from-api
+#| message: FALSE
+#| warning: FALSE
+
+base_url <- "https://restcountries.com/v4/"
+
+restcountries <- GET(glue("{base_url}all?fields=name,continents,region,subregion,unMember,gini,density,geolocation"))
+
+restcountries_tidy <- restcountries %>% 
+  content(as = "text") %>% 
+  fromJSON(flatten = TRUE) %>%
+  as_tibble()
+
+```
+
+```{r}
+#| label: merge-plastics
+
+library(stringi)
+
+normalize_name <- function(x) {
+  x %>% 
+    stri_trans_general("Latin-ASCII") %>% 
+    str_to_lower() %>% 
+    str_remove_all("[^a-z ]") %>% 
+    str_trim() %>% 
+    str_squish()
+}
+
+plastics_clean <- plastics %>% 
+  filter(country != "EMPTY") %>% 
+  mutate(
+    country = case_when(
+      country == "Korea" ~ "South Korea",
+      country == "Taiwan_ Republic of China (ROC)" ~ "Taiwan",
+      country == "United Kingdom of Great Britain & Northern Ireland" ~ 
+        "United Kingdom",
+      TRUE ~ country
+    )
+  ) %>%
+  mutate(country_key = normalize_name(country))
+
+restcountries_clean <- restcountries_tidy %>% 
+  dplyr::select(name.common, name.official, region, subregion,
+         density, unMember, geolocation.latitude, 
+         geolocation.longitude) %>% 
+  mutate(common_key = recode(
+    normalize_name(name.common),
+    "ivory coast" = "cote divoire"
+    ),
+         official_key = normalize_name(name.official))
+  
+
+# Different name types, try both
+
+joined <- plastics_clean %>%
+  left_join(
+    restcountries_clean %>% dplyr::select(-official_key),
+    by = c("country_key" = "common_key")
+  )
+
+matched <- joined %>% filter(!is.na(region))
+unmatched <- joined %>% filter(is.na(region)) %>%
+  dplyr::select(names(plastics_clean))
+
+refilled <- unmatched %>%
+  left_join(
+    restcountries_clean %>% dplyr::select(-common_key),
+    by = c("country_key" = "official_key")
+  )
+
+joined1 <- bind_rows(matched, refilled)
+```
+
+```{r}
+#| label: merge-plastics-cont
+## Fuzzy matching for parent companies using stringdist
+
+noise_words <- c(
+  "\\bthe\\b",
+  "\\binc\\.?\\b",
+  "\\bco\\.?\\b",
+  "\\bltd\\.?\\b",
+  "\\bcorp\\.?\\b",
+  "\\bcompany\\b",
+  "\\bcompanies\\b",
+  "\\bgroup\\b",       # "Nestlé Group" -> "nestlé"
+  "\\bholdings\\.?\\b",
+  "\\bllc\\.?\\b",
+  "\\bplc\\.?\\b",
+  "\\bgmbh\\b",        # common German suffix
+  "\\bsa\\b",          # common in Latin America/Europe
+  "\\bsrl\\b"
+)
+
+normalize_company <- function(x) {
+  x %>%
+    str_to_lower() %>%
+    str_remove_all(paste(noise_words, collapse = "|")) %>%
+    str_remove_all("[^a-z0-9 ]") %>%
+    str_squish()
+}
+
+resolve_typos <- function(names, threshold = 0.1) {
+  dist_matrix <- stringdistmatrix(names, names, method = "jw")
+  diag(dist_matrix) <- Inf
+  
+  canonical <- names
+  
+  for (i in seq_along(names)) {
+    best_dist <- min(dist_matrix[i, ])
+    if (best_dist < threshold) {
+      best_match <- which.min(dist_matrix[i, ])
+      canonical[i] <- min(names[i], names[best_match])
+    }
+  }
+  
+  tibble(normalized = names, canonical = str_to_title(canonical))
+}
+
+companies_raw <- unique(joined$parent_company)
+
+name_map <- tibble(original = companies_raw) %>%
+  mutate(normalized = normalize_company(original)) %>%
+  left_join(
+    resolve_typos(unique(.$normalized)),  # fuzzy match on normalized names only
+    by = "normalized"
+  )
+
+canonical_labels <- name_map %>%
+  count(canonical, original) %>%          # count how often each original appears
+  slice_max(n, by = canonical, n = 1, with_ties = FALSE) %>% # pick the most frequent per canonical
+  dplyr::select(canonical, display_name = original)
+
+joined <- joined1 %>%
+  left_join(name_map %>% dplyr::select(original, canonical),
+            by = c("parent_company" = "original")) %>%
+  left_join(canonical_labels, by = "canonical") %>% 
+  mutate(parent_company = display_name) %>% 
+  dplyr::select(-display_name, -canonical) %>% 
+  mutate(country = str_to_title(country_key))
+```
+
+```{r}
+#| label: API, World Bank API
+
+base_url <- "https://api.worldbank.org/v2/country/all/indicator/"
+
+pop_code <- "SP.POP.TOTL"
+gdp_code <- "NY.GDP.MKTP.CD"
+
+pop_url <- str_c(base_url, pop_code, "?format=json&per_page=20000")
+gdp_url <- str_c(base_url, gdp_code, "?format=json&per_page=20000")
+
+pop_raw <- GET(pop_url) %>% 
+  content(as = "text") %>% 
+  fromJSON(flatten = TRUE) %>%
+  pluck(2) %>% 
+  as_tibble() %>% 
+  select(
+    country.value,
+    year = date,
+    population = value
+  ) %>% 
+  mutate(year = as.numeric(year)) %>% 
+  filter(year %in% c(2019, 2020))
+
+gdp_raw <- GET(gdp_url) %>% 
+  content(as = "text") %>% 
+  fromJSON(flatten = TRUE) %>% 
+  pluck(2) %>% 
+  as_tibble() %>% 
+  select(
+    country.value,
+    year = date,
+    gdp = value
+  ) %>% 
+  mutate(year = as.numeric(year)) %>% 
+  filter(year %in% c(2019, 2020))
+
+pop_and_gdp_raw <- inner_join(pop_raw, gdp_raw, by = c("country.value", "year")) %>% 
+  mutate(country.value = recode(
+           country.value,
+          "Turkiye" = "Turkey",
+          "Hong Kong SAR, China" = "Hong Kong",
+          "Viet Nam" = "Vietnam",
+          "Korea, Rep." = "South Korea",
+          "United States" = "United States of America"
+          ),
+         country_code = normalize_name(country.value))
+
+joined_all <- joined %>% 
+  left_join(pop_and_gdp_raw, by = c("country_key" = "country_code", "year")) %>% 
+  mutate(
+    gdppercapita = gdp / population
+  )
+                              
+```
+
+# Main Dashboard
+
+
+## RQ2  How does country geography and economic status effect their amount of recorded plastic waste? Do more developed countries in terms of GDP and population tend to have more or less recorded waste?
+
+### visual 
+
+```{r}
+#| fig-alt: "A ridgeline density plot showing the distribution of plastic waste per capita in pieces per person by continent, with four ridges for Europe, Americas, Asia, and Africa. All distributions are right-skewed and peak near zero plastic items recorded per person. Europe has the widest spread with several secondary peaks and one extreme outlier. Asia also has an extreme outlier at 0.010 pieces of plastic per capita. Africa is the most concentrated near zero with a slightly wider base than the others."
+#| fig-cap: "Density ridge plot showing the distribution of pieces of plastic collected per capita across regions. Each ridge represents the distribution of country-level plastic totals per capita within a region."
+
+vis_1.5 <- joined_all %>%
+  filter(!is.na(region), region != "Oceania") %>% 
+  group_by(country, region, population) %>%
+  summarize(
+    total = sum(grand_total, na.rm = TRUE), .groups = "drop"
+  ) %>% 
+  mutate(
+    region = fct_reorder(region, total, .desc = TRUE),
+    waste_per_capita = total/population
+  ) %>% 
+  ggplot(aes(x=waste_per_capita, y=region, fill=region)) +
+  geom_density_ridges(alpha = 0.5, height = 1, position = "identity") +
+  labs(
+    title = "Plastic Waste per Capita by Continent",
+    subtitle = "Distribution of Plastic Waste per Capita by Continent (in Pieces/Person)",
+    x= "Plastic Waste Per Capita (Items per Person)",
+    y= ""
+  ) +
+  scale_fill_brewer(palette = "Pastel1") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        plot.title = element_text(face = "bold", size = 15))
+
+vis_1.5
+```
+
+### Model Summ  {height="28%"}
+
+```{r}
+country_year <- joined_all %>%
+  group_by(country, year, region) %>%
+  summarise(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    gdp = mean(gdp, na.rm = TRUE),
+    population = mean(population, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  filter(
+    !is.na(total_plastic),
+    !is.na(gdp),
+    !is.na(region)
+  )
+
+model_data <- country_year %>%
+  filter(
+    total_plastic > 0,
+    !is.na(gdp),
+   # !is.na(Temperature),
+    !is.na(region)
+  ) %>%
+  mutate(
+    log_total_plastic = log(total_plastic),
+    log_gdp = log(gdp)
+  )
+
+plastic_model <- lm(
+  log_total_plastic ~ log_gdp + region,
+  data = model_data
+)
+model_table <- tidy(plastic_model, conf.int = TRUE) %>%
+  select(term, estimate, std.error, statistic, p.value, conf.low, conf.high)
+
+model_gt <- model_table %>%
+  gt() %>%
+  cols_label(
+    term = md("**Term**"),
+    estimate = md("**Estimate**"),
+    std.error = md("**Std. Error**"),
+    statistic = md("**t Statistic**"),
+    p.value = md("**p-value**"),
+    conf.low = md("**CI Lower**"),
+    conf.high = md("**CI Upper**")
+  ) %>%
+  fmt_number(
+    columns = c(estimate, std.error, statistic, conf.low, conf.high),
+    decimals = 3
+  ) %>%
+  fmt_number(
+    columns = p.value,
+    decimals = 4
+  ) %>%
+  tab_header(
+    title = md("**Regression Model for Log Total Plastic**")
+  ) %>%
+  tab_source_note(
+    source_note = "Linear regression model predicting log total plastic from GDP and region."
+  )
+
+model_gt
+```
+
+
+### Tables {height="38%"}
+
+::: panel-tabset
+## Plastic Per Capita
+
+</br>
+
+Plastic Per Person
+
+```{r}
+#| label: top-30
+joined_all %>%
+  group_by(country, year) %>%
+  summarise(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    population = mean(population, na.rm = TRUE),
+    plastic_per_person = total_plastic / population,
+    .groups = "drop"
+  ) %>%
+  arrange(desc(plastic_per_person))%>%
+  slice_head(n = 20) %>% 
+  gt() %>% 
+  cols_label(
+    country = md("**Country**"),
+    year = md("**Year**"),
+    total_plastic = md("**Total Plastic**"),
+    population = md("**Population**"),
+    plastic_per_person = md("**Plastic per Person**")
+  ) %>% 
+  fmt_number(
+    columns = c(total_plastic, population),
+    decimals = 0
+  ) %>% 
+  fmt_number(
+    columns = plastic_per_person,
+    decimals = 5
+  ) %>% 
+  tab_header(
+    title = md("**Top 20 Countries by Plastic Contributed per Person**")
+  ) %>% 
+  tab_source_note(
+    source_note = "Plastic per person was calculated as total plastic collected divided by population."
+  )
+```
+
+## GDP
+
+</br>
+
+Capita Recorded Plastic Wast
+
+```{r}
+# GDP per capita income brackets
+income_breaks <- c(0, 10000, 20000, 40000, Inf)
+income_labels <- c("Low (<$10K)", "Lower-Middle ($10K-$20K)", 
+                   "Upper-Middle ($20K-$40K)", "High (>$40K)")
+
+country_level <- joined_all %>%
+  filter(!(parent_company %in% c("Grand Total", "null", "Unbranded", "Assorted", "NULL"))) %>%
+  group_by(country, region, gdppercapita, population) %>%
+  summarise(total_plastic = sum(grand_total, na.rm = TRUE), .groups = "drop") %>%
+  mutate(
+    plastic_per_capita = total_plastic / population,
+    income_group = cut(gdppercapita, breaks = income_breaks, labels = income_labels)
+  )
+
+# Custom function: summary stats for one income group
+summarise_income_group <- function(group_name) {
+  country_level %>%
+    filter(income_group == group_name) %>%
+    summarise(
+      income_group        = group_name,
+      n_countries         = n(),
+      avg_gdp_per_capita  = mean(gdppercapita, na.rm = TRUE),
+      avg_plastic_per_capita = mean(plastic_per_capita, na.rm = TRUE),
+      median_plastic_per_capita = median(plastic_per_capita, na.rm = TRUE),
+      total_plastic       = sum(total_plastic, na.rm = TRUE)
+    )
+}
+
+income_summary <- income_labels %>%
+  purrr::map(summarise_income_group) %>%
+  list_rbind()
+
+income_summary %>%
+  gt() %>%
+  cols_label(
+    income_group = md("**Income Group**"),
+    n_countries = md("**Countries**"),
+    avg_gdp_per_capita = md("**Avg GDP per Capita (USD)**"),
+    avg_plastic_per_capita = md("**Avg Plastic per Person**"),
+    median_plastic_per_capita = md("**Median Plastic per Person**"),
+    total_plastic = md("**Total Plastic**")
+  ) %>%
+  fmt_currency(columns = avg_gdp_per_capita, currency = "USD", decimals = 0) %>%
+  fmt_number(columns = c(avg_plastic_per_capita, median_plastic_per_capita), decimals = 5) %>%
+  fmt_number(columns = total_plastic, decimals = 0) %>%
+  tab_header(
+    title = md("**Per Capita Recorded Plastic Waste by Economic Group**")
+  ) %>%
+  tab_source_note(
+    source_note = "Countries grouped by GDP per capita using World Bank income thresholds. Recorded plastic per person calculated as total recorded items divided by population."
+  )
+```
+:::
+
+
+## Visuals
+
+### visual gdp {height="45%"}
+
+```{r}
+#| fig-alt: "A scatterplot comparing recorded plastic waste on the y-axis against GDP per capita on the x-axis, with points colored by continent. The majority of points are clustered near zero on both axes. One African country is a strong outlier with approximately 165,000 units of plastic waste recorded despite a very low GDP per capita below 5,000. Several Asian and Americas countries also show elevated waste counts at low GDP levels. European countries are spread across the full GDP per capita range but generally show low waste counts. No clear positive or negative relationship between GDP per capita and plastic waste is visible across the full dataset."
+#| fig-cap: "Scatterplot showing the relationship between GDP per capita and total plastic collected across countries. Points are colored by region to highlight geographic differences."
+
+library(plotly)
+
+scatter_plot <- joined_all %>%
+  group_by(country, gdppercapita, region) %>%
+  summarise(
+    total = sum(grand_total, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  ggplot(
+    aes(
+      x = gdppercapita,
+      y = total,
+      color = region,
+      text = paste(
+        "Country:", country,
+        "<br>GDP per Capita:", round(gdppercapita, 0),
+        "<br>Total Plastic:", scales::comma(total)
+      )
+    )
+  ) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(
+    title = "Plastic Waste vs GDP per Capita",
+    x = "GDP per Capita",
+    y = "Total Plastic Waste"
+  ) +
+  theme_light()
+
+ggplotly(scatter_plot, tooltip = "text")
+```
+
+
+### leaflet
+
+```{r}
+world_coords <- map_data("world") |>
+  group_by(region) |>
+  summarise(
+    lng = mean(long, na.rm = TRUE),
+    lat = mean(lat, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+plastics_country <- joined_all |>
+  filter(parent_company == "Grand Total") |>
+  group_by(country) |>
+  summarise(
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    country = recode(
+      country,
+      "Cote D_ivoire" = "Ivory Coast",
+      "ECUADOR" = "Ecuador",
+      "Hong Kong" = "Hong Kong",
+      "NIGERIA" = "Nigeria",
+      "United Kingdom" = "UK",
+      "United States of America" = "USA"
+    )
+  ) |>
+  left_join(world_coords, by = c("country" = "region"))
+
+leaflet(plastics_country |> filter(!is.na(lat), !is.na(lng))) |>
+  addTiles() |>
+  addCircleMarkers(
+    lng = ~lng,
+    lat = ~lat,
+    radius = ~sqrt(total_plastic) / 25,
+    popup = ~paste0(
+      "<strong>", country, "</strong><br>",
+      "Total Plastic: ", scales::comma(total_plastic)
+    ),
+    fillOpacity = 0.7,
+    stroke = FALSE
+  )
+```
+
+# Country Deep Dive
+
+## New country {width="65%"}
+
+### Why this country?
+We selected Montenegro because its plastic per capita waste was a very big outlier, making it useful for understanding general patterns in the dataset; how it differs from a typical country.
+
+
+```{r}
+
+renewable_code <- "EG.FEC.RNEW.ZS"  
+pop_growth_code <- "SP.POP.GROW"
+gdp_pc_code <- "NY.GDP.PCAP.CD"
+
+renewable_url <- str_c(base_url, renewable_code, "?format=json&per_page=20000")
+pop_growth_url <- str_c(base_url, pop_growth_code, "?format=json&per_page=20000")
+gdp_pc_url <- str_c(base_url, gdp_pc_code, "?format=json&per_page=20000")
+
+# Renewable energy %
+renewable_raw <- GET(renewable_url) %>% 
+  content(as = "text") %>% 
+  fromJSON(flatten = TRUE) %>%
+  pluck(2) %>% 
+  as_tibble() %>% 
+  mutate(
+    country = country.value,
+    year = as.numeric(date),
+    renewable_pct = value
+  ) %>% 
+  select(country, year, renewable_pct) %>% 
+  filter(
+    country == "Montenegro",
+    year >= 2010,
+    year <= 2020
+  ) %>% 
+  arrange(year)
+
+#pop growth
+pop_growth_raw <- GET(pop_growth_url) %>% 
+  content(as = "text") %>% 
+  fromJSON(flatten = TRUE) %>%
+  pluck(2) %>% 
+  as_tibble() %>% 
+  mutate(
+    country = country.value,
+    year = as.numeric(date),
+    pop_growth = value
+  ) %>% 
+  select(country, year, pop_growth) %>% 
+  filter(
+    country == "Montenegro",
+    year >= 2010,
+    year <= 2020
+  ) %>% 
+  arrange(year)
+
+#gdp per capita
+gdp_pc_raw <- GET(gdp_pc_url) %>% 
+  content(as = "text") %>% 
+  fromJSON(flatten = TRUE) %>% 
+  pluck(2) %>% 
+  as_tibble() %>% 
+  mutate(
+    country = country.value,
+    year = as.numeric(date),
+    gdp_pc = value
+  ) %>% 
+  select(country, year, gdp_pc) %>% 
+  filter(
+    country == "Montenegro",
+    year >= 2010,
+    year <= 2020
+  ) %>% 
+  arrange(year)
+
+montenegro <- pop_growth_raw %>%
+  left_join(gdp_pc_raw, by = c("country", "year"))
+
+montenegro_full <- montenegro %>%
+  left_join(renewable_raw, by = c("country", "year"))
+
+```
+
+
+### Slider plot and check Box
+```{r}
+#| context: setup
+
+library(tidyverse)
+library(shiny)
+library(httr)
+library(jsonlite)
+library(scales)
+library(ggplot2)
+library(leaflet)
+library(maps)
+library(plotly)
+library(shiny)
+
+base_url <- "https://api.worldbank.org/v2/country/MNE/indicator/"
+
+renewable_code <- "EG.FEC.RNEW.ZS"  
+pop_growth_code <- "SP.POP.GROW"
+gdp_pc_code <- "NY.GDP.PCAP.CD"
+
+get_wb_indicator <- function(code, new_name) {
+  url <- str_c(base_url, code, "?format=json&per_page=20000")
+  
+  GET(url) %>% 
+    content(as = "text") %>% 
+    fromJSON(flatten = TRUE) %>%
+    pluck(2) %>% 
+    as_tibble() %>% 
+    mutate(
+      country = country.value,
+      year = as.numeric(date),
+      value = as.numeric(value)
+    ) %>% 
+    select(country, year, value) %>% 
+    filter(year >= 2010, year <= 2020) %>%
+    rename(!!new_name := value)
+}
+
+renewable_raw <- get_wb_indicator(renewable_code, "renewable_pct")
+pop_growth_raw <- get_wb_indicator(pop_growth_code, "pop_growth")
+gdp_pc_raw <- get_wb_indicator(gdp_pc_code, "gdp_pc")
+
+montenegro_full <- pop_growth_raw %>%
+  left_join(gdp_pc_raw, by = c("country", "year")) %>%
+  left_join(renewable_raw, by = c("country", "year"))
+
+```
+
+
+```{r}
+#| panel: sidebar
+
+sliderInput(
+  inputId = "years",
+  label = "Select Year Range:",
+  min = min(montenegro_full$year, na.rm = TRUE),
+  max = max(montenegro_full$year, na.rm = TRUE),
+  value = c(2010, 2020),
+  step = 1,
+  sep = ""
+)
+
+checkboxGroupInput(
+  inputId = "variables",
+  label = "Select Variables to Display:",
+  choices = c(
+    "Population Growth" = "pop_growth",
+    "GDP per Capita" = "gdp_pc",
+    "Renewable Energy %" = "renewable_pct"
+  ),
+  selected = c("pop_growth", "renewable_pct")
+)
+
+```
+
+
+```{r}
+plotOutput("indicator_plot")
+```
+
+
+```{r}
+#| context: server
+
+filtered_data <- reactive({
+  montenegro_full %>%
+    filter(
+      year >= input$years[1],
+      year <= input$years[2]
+    ) %>%
+    select(country, year, all_of(input$variables)) %>%
+    pivot_longer(
+      cols = all_of(input$variables),
+      names_to = "indicator",
+      values_to = "value"
+    ) %>%
+    mutate(
+      indicator = recode(
+        indicator,
+        pop_growth = "Population Growth",
+        gdp_pc = "GDP per Capita",
+        renewable_pct = "Renewable Energy %"
+      )
+    )
+})
+
+output$indicator_plot <- renderPlot({
+  filtered_data() %>%
+    ggplot(aes(x = year, y = value, color = indicator)) +
+    geom_line(linewidth = 1.2) +
+    geom_point(size = 2.5) +
+    facet_wrap(~ indicator, scales = "free_y") +
+    scale_color_brewer(palette = "Dark2", guide = "none") +
+    labs(
+      title = "Montenegro Development Indicators Over Time",
+      subtitle = "Indicators update based on selected years and variables",
+      x = "Year",
+      y = "Value"
+    ) +
+    theme_light(base_size = 14) +
+    theme(
+      plot.title = element_text(face = "bold"),
+      axis.title = element_text(face = "bold"),
+      panel.grid.minor = element_blank()
+    )
+})
+
+```
+
+### tables
+```{r}
+tableOutput("indicator_table")
+```
+
+
+```{r}
+#| context: server
+
+output$indicator_table <- renderTable({
+  montenegro_full %>%
+    filter(
+      year >= input$years[1],
+      year <= input$years[2]
+    ) %>%
+    select(country, year, all_of(input$variables))
+})
+```
+
+
+

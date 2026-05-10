@@ -480,7 +480,7 @@ leaflet(plastics_country |> filter(!is.na(lat), !is.na(lng))) |>
 ## New country
 
 ### Why this country?
-We selected Montenegro because its plastic per capita waste was a very big outlier, making it useful for understanding general patterns in the dataset; how it differs from a typical country.
+We selected Montenegro because it appeared as a strong outlier in several of the plastic waste per capita analyses, with substantially higher values than all other countries in the dataset. This makes Montenegro an interesting case study for exploring how environmental, economic, and demographic indicators relate to waste patterns over time. By focusing on an unusual observation, we can better understand how Montenegro differs from more typical countries represented in the data.
 
 
 ```{r}
@@ -559,8 +559,6 @@ montenegro_full <- montenegro %>%
 ```
 
 
-
-## more
 
 ### Plot
 

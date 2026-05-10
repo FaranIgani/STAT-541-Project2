@@ -246,8 +246,13 @@ joined_all <- joined %>%
 
 # Main Dashboard
 
+## 
 
-## RQ2  How does country geography and economic status effect their amount of recorded plastic waste? Do more developed countries in terms of GDP and population tend to have more or less recorded waste?
+::: {.callout-note}
+### Research Question
+
+How does country geography and economic status effect their amount of recorded plastic waste? Do more developed countries in terms of GDP and population tend to have more or less recorded waste?
+:::
 
 ### visual 
 

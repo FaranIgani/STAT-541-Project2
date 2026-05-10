@@ -293,7 +293,7 @@ vis_1.5
 
 </br>
 
-Plastic Per Person
+Plastic Waste Per Person
 
 ```{r}
 #| label: top-30
@@ -335,7 +335,7 @@ joined_all %>%
 
 </br>
 
-Capita Recorded Plastic Wast
+Capita Recorded Plastic Waste
 
 ```{r}
 # GDP per capita income brackets

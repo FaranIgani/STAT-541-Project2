@@ -577,7 +577,7 @@ p <- ggplot(renewable_raw, aes(
   geom_line(color = "steelblue", linewidth = 1) +
   geom_point(color = "steelblue", size = 2) +
   labs(
-    title = "Renewable Energy Consumption in the Montenegro (2010-2020)",
+    title = "Renewable Energy Consumption in Montenegro (2010-2020)",
     x = "Year",
     y = "Renewable Energy Consumption (%)"
   ) +
@@ -602,7 +602,7 @@ p_gdp <- ggplot(gdp_pc_raw, aes(
   geom_line(color = "steelblue", linewidth = 1) +
   geom_point(color = "steelblue", size = 2) +
   labs(
-    title = "GDP per Capita in the Montenegro (2010-2020)",
+    title = "GDP per Capita in Montenegro (2010-2020)",
     x = "Year",
     y = "GDP per Capita"
   ) +
@@ -626,7 +626,7 @@ p_pop <- ggplot(pop_growth_raw, aes(
   geom_line(color = "steelblue", linewidth = 1) +
   geom_point(color = "steelblue", size = 2) +
   labs(
-    title = "Population Growth in the Montenegro (2010-2020)",
+    title = "Population Growth in Montenegro (2010-2020)",
     x = "Year",
     y = "Population Growth (%)"
   ) +

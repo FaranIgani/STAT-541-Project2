@@ -257,7 +257,16 @@ joined_all <- joined %>%
 How does country geography and economic status effect their amount of recorded plastic waste? Do more developed countries in terms of GDP and population tend to have more or less recorded waste?
 :::
 
-### visual 
+
+### Tables {height="38%"}
+
+::: panel-tabset
+
+## Density Plot
+
+</br>
+
+Plastic Per Person
 
 ```{r}
 #| fig-alt: "A ridgeline density plot showing the distribution of plastic waste per capita in pieces per person by continent, with four ridges for Europe, Americas, Asia, and Africa. All distributions are right-skewed and peak near zero plastic items recorded per person. Europe has the widest spread with several secondary peaks and one extreme outlier. Asia also has an extreme outlier at 0.010 pieces of plastic per capita. Africa is the most concentrated near zero with a slightly wider base than the others."
@@ -289,73 +298,53 @@ vis_1.5 <- joined_all %>%
 vis_1.5
 ```
 
-### Model Summ  {height="28%"}
+## GDP Plot
+
+</br>
+
+GDO vs Plastic Waste
 
 ```{r}
-country_year <- joined_all %>%
-  group_by(country, year, region) %>%
+#| fig-alt: "A scatterplot comparing recorded plastic waste on the y-axis against GDP per capita on the x-axis, with points colored by continent. The majority of points are clustered near zero on both axes. One African country is a strong outlier with approximately 165,000 units of plastic waste recorded despite a very low GDP per capita below 5,000. Several Asian and Americas countries also show elevated waste counts at low GDP levels. European countries are spread across the full GDP per capita range but generally show low waste counts. No clear positive or negative relationship between GDP per capita and plastic waste is visible across the full dataset."
+#| fig-cap: "Scatterplot showing the relationship between GDP per capita and total plastic collected across countries. Points are colored by region to highlight geographic differences."
+
+library(plotly)
+
+scatter_plot <- joined_all %>%
+  group_by(country, gdppercapita, region) %>%
   summarise(
-    total_plastic = sum(grand_total, na.rm = TRUE),
-    gdp = mean(gdp, na.rm = TRUE),
-    population = mean(population, na.rm = TRUE),
+    total = sum(grand_total, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  filter(
-    !is.na(total_plastic),
-    !is.na(gdp),
-    !is.na(region)
-  )
+  ggplot(
+    aes(
+      x = gdppercapita,
+      y = total,
+      color = region,
+      text = paste(
+        "Country:", country,
+        "<br>GDP per Capita:", round(gdppercapita, 0),
+        "<br>Total Plastic:", scales::comma(total)
+      )
+    )
+  ) +
+  geom_point(size = 3, alpha = 0.7) +
+  scale_color_brewer(palette = "Dark2") +
+  labs(
+    title = "Plastic Waste vs GDP per Capita",
+    x = "GDP per Capita",
+    y = "Total Plastic Waste"
+  ) +
+  theme_light()
 
-model_data <- country_year %>%
-  filter(
-    total_plastic > 0,
-    !is.na(gdp),
-   # !is.na(Temperature),
-    !is.na(region)
-  ) %>%
-  mutate(
-    log_total_plastic = log(total_plastic),
-    log_gdp = log(gdp)
-  )
-
-plastic_model <- lm(
-  log_total_plastic ~ log_gdp + region,
-  data = model_data
-)
-model_table <- tidy(plastic_model, conf.int = TRUE) %>%
-  select(term, estimate, std.error, statistic, p.value, conf.low, conf.high)
-
-model_gt <- model_table %>%
-  gt() %>%
-  cols_label(
-    term = md("**Term**"),
-    estimate = md("**Estimate**"),
-    std.error = md("**Std. Error**"),
-    statistic = md("**t Statistic**"),
-    p.value = md("**p-value**"),
-    conf.low = md("**CI Lower**"),
-    conf.high = md("**CI Upper**")
-  ) %>%
-  fmt_number(
-    columns = c(estimate, std.error, statistic, conf.low, conf.high),
-    decimals = 3
-  ) %>%
-  fmt_number(
-    columns = p.value,
-    decimals = 4
-  ) %>%
-  tab_header(
-    title = md("**Regression Model for Log Total Plastic**")
-  ) %>%
-  tab_source_note(
-    source_note = "Linear regression model predicting log total plastic from GDP and region."
-  )
-
-model_gt
+ggplotly(scatter_plot, tooltip = "text")
 ```
+:::
 
 
-### Tables {height="38%"}
+## Visuals
+
+### visuals {height="45%"}
 
 ::: panel-tabset
 ## Plastic Per Capita
@@ -459,49 +448,75 @@ income_summary %>%
     source_note = "Countries grouped by GDP per capita using World Bank income thresholds. Recorded plastic per person calculated as total recorded items divided by population."
   )
 ```
-:::
 
+## Model Summary
 
-## Visuals
+</br>
 
-### visual gdp {height="45%"}
-
+Linear Mixed Model
 ```{r}
-#| fig-alt: "A scatterplot comparing recorded plastic waste on the y-axis against GDP per capita on the x-axis, with points colored by continent. The majority of points are clustered near zero on both axes. One African country is a strong outlier with approximately 165,000 units of plastic waste recorded despite a very low GDP per capita below 5,000. Several Asian and Americas countries also show elevated waste counts at low GDP levels. European countries are spread across the full GDP per capita range but generally show low waste counts. No clear positive or negative relationship between GDP per capita and plastic waste is visible across the full dataset."
-#| fig-cap: "Scatterplot showing the relationship between GDP per capita and total plastic collected across countries. Points are colored by region to highlight geographic differences."
-
-library(plotly)
-
-scatter_plot <- joined_all %>%
-  group_by(country, gdppercapita, region) %>%
+country_year <- joined_all %>%
+  group_by(country, year, region) %>%
   summarise(
-    total = sum(grand_total, na.rm = TRUE),
+    total_plastic = sum(grand_total, na.rm = TRUE),
+    gdp = mean(gdp, na.rm = TRUE),
+    population = mean(population, na.rm = TRUE),
     .groups = "drop"
   ) %>%
-  ggplot(
-    aes(
-      x = gdppercapita,
-      y = total,
-      color = region,
-      text = paste(
-        "Country:", country,
-        "<br>GDP per Capita:", round(gdppercapita, 0),
-        "<br>Total Plastic:", scales::comma(total)
-      )
-    )
-  ) +
-  geom_point(size = 3, alpha = 0.7) +
-  scale_color_brewer(palette = "Dark2") +
-  labs(
-    title = "Plastic Waste vs GDP per Capita",
-    x = "GDP per Capita",
-    y = "Total Plastic Waste"
-  ) +
-  theme_light()
+  filter(
+    !is.na(total_plastic),
+    !is.na(gdp),
+    !is.na(region)
+  )
 
-ggplotly(scatter_plot, tooltip = "text")
+model_data <- country_year %>%
+  filter(
+    total_plastic > 0,
+    !is.na(gdp),
+   # !is.na(Temperature),
+    !is.na(region)
+  ) %>%
+  mutate(
+    log_total_plastic = log(total_plastic),
+    log_gdp = log(gdp)
+  )
+
+plastic_model <- lm(
+  log_total_plastic ~ log_gdp + region,
+  data = model_data
+)
+model_table <- tidy(plastic_model, conf.int = TRUE) %>%
+  select(term, estimate, std.error, statistic, p.value, conf.low, conf.high)
+
+model_gt <- model_table %>%
+  gt() %>%
+  cols_label(
+    term = md("**Term**"),
+    estimate = md("**Estimate**"),
+    std.error = md("**Std. Error**"),
+    statistic = md("**t Statistic**"),
+    p.value = md("**p-value**"),
+    conf.low = md("**CI Lower**"),
+    conf.high = md("**CI Upper**")
+  ) %>%
+  fmt_number(
+    columns = c(estimate, std.error, statistic, conf.low, conf.high),
+    decimals = 3
+  ) %>%
+  fmt_number(
+    columns = p.value,
+    decimals = 4
+  ) %>%
+  tab_header(
+    title = md("**Regression Model for Log Total Plastic**")
+  ) %>%
+  tab_source_note(
+    source_note = "Linear regression model predicting log total plastic from GDP and region."
+  )
+
+model_gt
 ```
-
+:::
 
 ### leaflet
 

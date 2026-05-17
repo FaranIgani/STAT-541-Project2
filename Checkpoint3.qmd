@@ -41,6 +41,8 @@ library(gganimate)
 library(gifski)
 library(shiny)
 library(broom)
+library(rsconnect)
+library(bslib)
 ```
 
 ```{r}
@@ -539,7 +541,6 @@ montenegro_full <- montenegro %>%
 ## Slider plot and check Box  {width="25%"}
 
 
-
 ```{r}
 #| context: setup
 
@@ -588,36 +589,43 @@ montenegro_full <- pop_growth_raw %>%
 
 ```
 
-### controls
+### controls {height="120px"}
 ```{r}
-#| panel: sidebar
-
-sliderInput(
-  inputId = "years",
-  label = "Select Year Range:",
-  min = min(montenegro_full$year, na.rm = TRUE),
-  max = max(montenegro_full$year, na.rm = TRUE),
-  value = c(2010, 2020),
-  step = 1,
-  sep = ""
-)
-
-checkboxGroupInput(
-  inputId = "variables",
-  label = "Select Variables to Display:",
-  choices = c(
-    "Population Growth" = "pop_growth",
-    "GDP per Capita" = "gdp_pc",
-    "Renewable Energy %" = "renewable_pct"
+bslib::layout_columns(
+  
+  div(
+    sliderInput(
+      inputId = "years",
+      label = "Select Year Range:",
+      min = min(montenegro_full$year, na.rm = TRUE),
+      max = max(montenegro_full$year, na.rm = TRUE),
+      value = c(2010, 2020),
+      step = 1,
+      sep = ""
+    )
   ),
-  selected = c("pop_growth", "renewable_pct")
-)
 
+  div(
+    checkboxGroupInput(
+      inputId = "variables",
+      label = "Select Variables to Display:",
+      choices = c(
+        "Population Growth" = "pop_growth",
+        "GDP per Capita" = "gdp_pc",
+        "Renewable Energy %" = "renewable_pct"
+      ),
+      selected = c("gdp_pc", "renewable_pct")
+    )
+  ),
+
+  col_widths = c(6, 6)
+)
 ```
 
-
+## Row
+### Montenegro Development Indicators
 ```{r}
-plotOutput("indicator_plot")
+plotOutput("indicator_plot", height = "700px")
 ```
 
 

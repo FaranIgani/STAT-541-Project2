@@ -610,7 +610,7 @@ bslib::layout_columns(
       inputId = "variables",
       label = "Select Variables to Display:",
       choices = c(
-        "Population Growth" = "pop_growth",
+        "Population Growth %" = "pop_growth",
         "GDP per Capita" = "gdp_pc",
         "Renewable Energy %" = "renewable_pct"
       ),
@@ -623,6 +623,7 @@ bslib::layout_columns(
 ```
 
 ## Row
+
 ### Montenegro Development Indicators
 ```{r}
 plotOutput("indicator_plot", height = "700px")

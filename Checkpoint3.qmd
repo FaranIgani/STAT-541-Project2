@@ -4,9 +4,11 @@ format:
   dashboard:
     orientation: rows
     theme: flatly
+    logo: plastic-logo.png
+    logo-alt: "Recycling Logo with caption"
+    
 server: shiny
-logo: plastic-logo.svg
-logo-alt: "Recycling Logo with caption"
+
 nav-buttons:
       - icon: github
         href: https://github.com/FaranIgani

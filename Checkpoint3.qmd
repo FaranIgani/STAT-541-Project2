@@ -466,7 +466,7 @@ income_summary %>%
 
 
 ## Why this country?
-We selected Montenegro because it appeared as a strong outlier in several of the plastic waste per capita analyses, with substantially higher values than all other countries in the dataset, specifically in 2019. This makes Montenegro an interesting case study for exploring how environmental, economic, and demographic indicators relate to waste patterns over time. Using this dashboard, we aim to gain a better understanding of **why** Montenegro differs from other countries represented in the data.
+We selected **Montenegro** because it appeared as a strong outlier in several of the plastic waste per capita analyses, with substantially higher values than all other countries in the dataset, specifically in 2019. This makes Montenegro an interesting case study for exploring how environmental, economic, and demographic indicators relate to waste patterns over time. Using this dashboard, we aim to gain a better understanding of **why** Montenegro differs from other countries represented in the data.
 
 
 

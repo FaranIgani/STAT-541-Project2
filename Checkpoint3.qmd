@@ -44,7 +44,8 @@ library(gifski)
 ```{r}
 #| context: setup
 #| label: Load the Data
-plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv')
+plastics <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2021/2021-01-26/plastics.csv',
+  show_col_types = FALSE)
 ```
 
 ```{r}
@@ -472,78 +473,35 @@ We selected **Montenegro** because it appeared as a strong outlier in several of
 
 ```{r}
 #| context: setup
+get_wb_indicator <- function(code, new_name) {
+  url <- str_c(
+    "https://api.worldbank.org/v2/country/MNE/indicator/",
+    code,
+    "?format=json&per_page=100"
+  )
 
-renewable_code <- "EG.FEC.RNEW.ZS"  
-pop_growth_code <- "SP.POP.GROW"
-gdp_pc_code <- "NY.GDP.PCAP.CD"
+  GET(url, timeout(10)) %>%
+    content(as = "text", encoding = "UTF-8") %>%
+    fromJSON(flatten = TRUE) %>%
+    pluck(2) %>%
+    as_tibble() %>%
+    mutate(
+      country = country.value,
+      year = as.numeric(date),
+      value = as.numeric(value)
+    ) %>%
+    select(country, year, value) %>%
+    filter(year >= 2010, year <= 2020) %>%
+    rename(!!new_name := value)
+}
 
-renewable_url <- str_c(base_url, renewable_code, "?format=json&per_page=20000")
-pop_growth_url <- str_c(base_url, pop_growth_code, "?format=json&per_page=20000")
-gdp_pc_url <- str_c(base_url, gdp_pc_code, "?format=json&per_page=20000")
+renewable_raw <- get_wb_indicator("EG.FEC.RNEW.ZS", "renewable_pct")
+pop_growth_raw <- get_wb_indicator("SP.POP.GROW", "pop_growth")
+gdp_pc_raw <- get_wb_indicator("NY.GDP.PCAP.CD", "gdp_pc")
 
-# Renewable energy %
-renewable_raw <- GET(renewable_url) %>% 
-  content(as = "text") %>% 
-  fromJSON(flatten = TRUE) %>%
-  pluck(2) %>% 
-  as_tibble() %>% 
-  mutate(
-    country = country.value,
-    year = as.numeric(date),
-    renewable_pct = value
-  ) %>% 
-  select(country, year, renewable_pct) %>% 
-  filter(
-    country == "Montenegro",
-    year >= 2010,
-    year <= 2020
-  ) %>% 
-  arrange(year)
-
-#pop growth
-pop_growth_raw <- GET(pop_growth_url) %>% 
-  content(as = "text") %>% 
-  fromJSON(flatten = TRUE) %>%
-  pluck(2) %>% 
-  as_tibble() %>% 
-  mutate(
-    country = country.value,
-    year = as.numeric(date),
-    pop_growth = value
-  ) %>% 
-  select(country, year, pop_growth) %>% 
-  filter(
-    country == "Montenegro",
-    year >= 2010,
-    year <= 2020
-  ) %>% 
-  arrange(year)
-
-#gdp per capita
-gdp_pc_raw <- GET(gdp_pc_url) %>% 
-  content(as = "text") %>% 
-  fromJSON(flatten = TRUE) %>% 
-  pluck(2) %>% 
-  as_tibble() %>% 
-  mutate(
-    country = country.value,
-    year = as.numeric(date),
-    gdp_pc = value
-  ) %>% 
-  select(country, year, gdp_pc) %>% 
-  filter(
-    country == "Montenegro",
-    year >= 2010,
-    year <= 2020
-  ) %>% 
-  arrange(year)
-
-montenegro <- pop_growth_raw %>%
-  left_join(gdp_pc_raw, by = c("country", "year"))
-
-montenegro_full <- montenegro %>%
+montenegro_full <- pop_growth_raw %>%
+  left_join(gdp_pc_raw, by = c("country", "year")) %>%
   left_join(renewable_raw, by = c("country", "year"))
-
 ```
 
 

@@ -5507,9 +5507,6 @@
     "Checkpoint3_files/libs/quarto-html/tippy.umd.min.js": {
       "checksum": "d828775275749701b48bd9d958814111"
     },
-    "Checkpoint3.html": {
-      "checksum": "23106459b18808abe3bd17897233f485"
-    },
     "Checkpoint3.qmd": {
       "checksum": "6f2a8071c795f7f5ad387cc8b8ed8aa1"
     },
@@ -5522,11 +5519,8 @@
     "plastic-logo.svg": {
       "checksum": "5f0ede8d37a55a7f551703be1c0bbc4c"
     },
-    "Project1Final.qmd": {
-      "checksum": "69dd7e3b83e6b3fd7006011a89e96e83"
-    },
     "Project2final.html": {
-      "checksum": "7117dcbdeb915ccf69aeee10184b497b"
+      "checksum": "4f3f326367af2cb1aa2cf0dd77d938b6"
     },
     "Project2final.qmd": {
       "checksum": "c4e875727d7b2513feb73b16db55e786"

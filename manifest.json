@@ -4,7 +4,7 @@
   "platform": "4.6.0",
   "metadata": {
     "appmode": "quarto-shiny",
-    "primary_rmd": "Project2final.qmd",
+    "primary_rmd": "Checkpoint3.qmd",
     "primary_html": null,
     "content_category": null,
     "has_parameters": false
@@ -5201,6 +5201,9 @@
     "Checkpoint2.qmd": {
       "checksum": "eb47bc0ef76a88e20a4ced3ea271e9c5"
     },
+    "Checkpoint3.qmd": {
+      "checksum": "c4e875727d7b2513feb73b16db55e786"
+    },
     "plastic-logo.png": {
       "checksum": "63cd50a82935cd4aebb526a9b170a6c0"
     },
@@ -5209,9 +5212,6 @@
     },
     "Project2final.html": {
       "checksum": "4f3f326367af2cb1aa2cf0dd77d938b6"
-    },
-    "Project2final.qmd": {
-      "checksum": "c4e875727d7b2513feb73b16db55e786"
     }
   },
   "users": null
